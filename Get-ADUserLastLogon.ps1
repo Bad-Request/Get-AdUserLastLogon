@@ -4,6 +4,7 @@
 
 .DESCRIPTION
     Each domain controller is queried separately to calculate the last logon from all results of all DCs.
+    Depending on the number of domain controllers this may take some time.
 
 .EXAMPLE
     Get-ADUserLastLogon.ps1 -samAccountName s.stollane
@@ -21,7 +22,7 @@
     Gets all enabled AD user accounts and pipes the output to the script, returning logon dates for all users
 
 .NOTES
-    Version: 1.0
+    Version: 1.1
 #>
 
 
@@ -46,11 +47,9 @@ process {
 
     $UserLogonName = $samAccountName
 
-
     foreach ($user in $UserLogonName) {
     
         $resultlogon = @()
-
 
         # Get user to test for existence
         $dn = Get-AdUser -Identity $user -Properties distinguishedName | Select-Object -ExpandProperty distinguishedName
@@ -61,6 +60,8 @@ process {
             # Last login is per DC, get all DCs in domain
             $getdc = (Get-ADDomainController -Filter *).Name
 
+            Write-Verbose "Querying $($UserLogonName.Count) against $($getdc.count) Domain Controllers"
+
             # Get user details from each DC
             foreach ($dc in $getdc) {
                 Write-Verbose "Retrieving login date for $user on $dc"
@@ -70,7 +71,7 @@ process {
 
                     $resultlogon += New-Object -TypeName PSObject -Property ([ordered]@{
 
-                            'DisplayName'           = $aduser.Name
+                            'DisplayName'    = $aduser.Name
                             'samAccountName' = $adUser.samAccountName
                             'DC'             = $dc
                             'LastLogon'      = [datetime]::FromFileTime($aduser.'lastLogon')
@@ -80,9 +81,7 @@ process {
                 }
 
                 Catch {
-                    ''
-                    Write-Warning "No reports from $($dc)!"
-
+                    Write-Warning "No reports from $($dc)"
                 }
 
             }
@@ -96,8 +95,8 @@ process {
             # Check if user has logged into against DC otherwise blank login date 
             If ($null -EQ ($resultlogon | Where-Object { $_.lastlogon -NotLike '*1601*' })) {
 
-                ''
-                Write-Warning "No reports for user $($aduser.samAccountName). Possible reason: No first login."
+                Write-Verbose "No reports for user $($aduser.samAccountName). Possible reason: No first login."
+                Write-Debug ""
                 $resultlogon[0].LastLogon = $null
                 $result += $resultlogon[0]
 
