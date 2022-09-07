@@ -96,7 +96,6 @@ process {
             If ($null -EQ ($resultlogon | Where-Object { $_.lastlogon -NotLike '*1601*' })) {
 
                 Write-Verbose "No reports for user $($aduser.samAccountName). Possible reason: No first login."
-                Write-Debug ""
                 $resultlogon[0].LastLogon = $null
                 $result += $resultlogon[0]
 
