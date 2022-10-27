@@ -22,7 +22,8 @@
     Gets all enabled AD user accounts and pipes the output to the script, returning logon dates for all users
 
 .NOTES
-    Version: 1.1
+    Version 1.2: Updates to include extra user details for analysis
+    Version 1.1: Initial release, don't ask about 1.0
 #>
 
 
@@ -60,21 +61,23 @@ process {
             # Last login is per DC, get all DCs in domain
             $getdc = (Get-ADDomainController -Filter *).Name
 
-            Write-Verbose "Querying $($UserLogonName.Count) against $($getdc.count) Domain Controllers"
+            Write-Debug "Querying against $($getdc.count) Domain Controllers"
 
             # Get user details from each DC
             foreach ($dc in $getdc) {
-                Write-Verbose "Retrieving login date for $user on $dc"
+                Write-Debug "Retrieving login date for $user on $dc"
                 Try {
 
-                    $aduser = Get-ADUser $user -Server $dc -Properties lastlogon -ErrorAction Stop
+                    $aduser = Get-ADUser $user -Server $dc -Properties lastlogon,whenCreated,Description -ErrorAction Stop
 
                     $resultlogon += New-Object -TypeName PSObject -Property ([ordered]@{
 
                             'DisplayName'    = $aduser.Name
                             'samAccountName' = $adUser.samAccountName
                             'DC'             = $dc
-                            'LastLogon'      = [datetime]::FromFileTime($aduser.'lastLogon')
+                            'LastLogon'      = [datetime]::FromFileTime($aduser.'lastLogon') 
+                            'Description'    = $aduser.Description
+                            'whenCreated'    = $aduser.whenCreated
 
                         })
 
@@ -95,8 +98,12 @@ process {
             # Check if user has logged into against DC otherwise blank login date 
             If ($null -EQ ($resultlogon | Where-Object { $_.lastlogon -NotLike '*1601*' })) {
 
-                Write-Verbose "No reports for user $($aduser.samAccountName). Possible reason: No first login."
-                $resultlogon[0].LastLogon = $null
+                Write-Debug "No reports for user $($aduser.samAccountName). Possible reason: No first login."
+                try {
+                    $resultlogon[0].LastLogon = $null
+                } catch {
+                    Add-Member -InputObject $resultlogon[0] -Name LastLogon -Value $null
+                }
                 $result += $resultlogon[0]
 
             }
@@ -108,7 +115,7 @@ process {
 
         else
 
-        { throw 'User not found. Check entered username.' }
+        { Write-Error "User '$user' not found. Check entered username." }
 
     }
 
